@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">轻刻 LiteCal</string>
+    <string name="widget_name">轻刻 · 今日热量与蛋白质</string>
+    <string name="widget_desc">实时查看今日剩余可吃热量与蛋白质进度，一键记饮食、AI识餐或打卡喝水</string>
+</resources>

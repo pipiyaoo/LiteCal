@@ -1,6 +1,8 @@
 package com.litecal.app.ui.trends
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,10 +46,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.litecal.app.domain.model.AdaptiveTdeeResult
+import com.litecal.app.domain.model.WeeklyBankState
 import com.litecal.app.ui.DashboardUiState
 import com.litecal.app.ui.WeightTrendPoint
+import com.litecal.app.ui.theme.AmberSecondaryLight
 import kotlin.math.max
-import kotlin.math.min
 
 @Composable
 fun TrendsScreen(
@@ -81,6 +85,12 @@ fun TrendsScreen(
                 targetWeight = state.profile.targetWeightKg,
                 latestEma = state.latestEmaKg
             )
+        }
+
+        state.weeklyBank?.let { bank ->
+            item {
+                WeeklyCalorieBankCard(bank = bank)
+            }
         }
 
         state.tdeeResult?.let { tdee ->
@@ -157,7 +167,7 @@ private fun WeightEmaChartCard(
                 }
             } else {
                 val primaryColor = MaterialTheme.colorScheme.primary
-                val dotColor = MaterialTheme.colorScheme.secondary
+                val dotColor = AmberSecondaryLight
                 val gridColor = MaterialTheme.colorScheme.surfaceVariant
 
                 val allValues = points.flatMap { listOfNotNull(it.rawWeightKg, it.emaWeightKg) }
@@ -228,7 +238,7 @@ private fun WeightEmaChartCard(
                     Text(
                         text = "● 橙点：每日原始晨重（含水分波动）",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.secondary
+                        color = AmberSecondaryLight
                     )
                     Text(
                         text = "━ 绿线：7日 EMA 真实趋势",
@@ -236,6 +246,100 @@ private fun WeightEmaChartCard(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
+    val balance = bank.bankBalanceBeforeToday
+    val balanceText = when {
+        balance > 0 -> "本周结余 +$balance kcal"
+        balance < 0 -> "待分摊 $balance kcal"
+        else -> "预算均衡"
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🏦 周热量银行（周一至周日）", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = balanceText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (balance < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MetricCol("本周总预算", "${bank.weeklyTotalBudget} kcal")
+                MetricCol("今日动态额度", "${bank.todayDynamicTarget} kcal", highlight = true)
+                MetricCol("安全保底下限", "${bank.safetyFloorKcal} kcal")
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                bank.days.forEach { d ->
+                    val ratio = if (d.plannedKcal > 0) {
+                        (d.intakeKcal.toFloat() / d.plannedKcal.toFloat()).coerceIn(0f, 1.2f)
+                    } else 0f
+                    val barColor = when {
+                        d.isIncomplete -> MaterialTheme.colorScheme.outline
+                        d.intakeKcal > d.plannedKcal -> MaterialTheme.colorScheme.error
+                        d.isToday -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.BottomCenter,
+                            modifier = Modifier
+                                .width(28.dp)
+                                .height(54.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((54f * (ratio / 1.2f)).dp)
+                                    .background(barColor)
+                            )
+                        }
+                        Text(
+                            text = d.dayLabel.removePrefix("周"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (d.isToday) FontWeight.Bold else FontWeight.Normal
+                        )
+                        Text(
+                            text = if (d.intakeKcal > 0) "${d.intakeKcal}" else "${d.plannedKcal}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

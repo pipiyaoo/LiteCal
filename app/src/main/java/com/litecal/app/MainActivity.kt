@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -31,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.litecal.app.domain.model.MealType
 import com.litecal.app.ui.DashboardUiState
@@ -124,9 +128,29 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
     var currentTab by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (currentTab == 0) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        viewModel.openQuickSheet(
+                            mealType = MealType.defaultForHour(LocalTime.now().hour),
+                            initialTab = 0
+                        )
+                    },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("记饮食") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp
+            ) {
                 NavigationBarItem(
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
@@ -136,13 +160,13 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
                 NavigationBarItem(
                     selected = currentTab == 1,
                     onClick = { currentTab = 1 },
-                    icon = { Icon(Icons.Default.ShowChart, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = null) },
                     label = { Text("趋势") }
                 )
                 NavigationBarItem(
                     selected = currentTab == 2,
                     onClick = { currentTab = 2 },
-                    icon = { Icon(Icons.Default.MenuBook, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
                     label = { Text("词库与设置") }
                 )
             }
@@ -165,7 +189,8 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
                     onDeleteMealLog = viewModel::deleteMealLog,
                     onRecordWeight = viewModel::recordWeight,
                     onAddWater = viewModel::addWater,
-                    onToggleIncompleteDay = viewModel::toggleIncompleteDay
+                    onToggleIncompleteDay = viewModel::toggleIncompleteDay,
+                    onNavigateToTrends = { currentTab = 1 }
                 )
 
                 1 -> TrendsScreen(
@@ -237,7 +262,8 @@ fun DashboardPreview() {
             onDeleteMealLog = {},
             onRecordWeight = {},
             onAddWater = {},
-            onToggleIncompleteDay = {}
+            onToggleIncompleteDay = {},
+            onNavigateToTrends = {}
         )
     }
 }

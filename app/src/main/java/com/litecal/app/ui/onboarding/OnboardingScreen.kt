@@ -1,14 +1,14 @@
 package com.litecal.app.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.litecal.app.domain.engine.MetabolismEngine
 import com.litecal.app.domain.model.ActivityLevel
@@ -42,7 +45,6 @@ import com.litecal.app.domain.model.UserProfile
 import java.time.LocalDate
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OnboardingScreen(
     initialProfile: UserProfile,
@@ -83,14 +85,39 @@ fun OnboardingScreen(
     )
     val weekendTarget = previewBank.days.first { it.dayLabel == "周六" }.plannedKcal
 
-    Scaffold { innerPadding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                shadowElevation = 4.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    Button(
+                        onClick = { onComplete(draftProfile) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("开启科学减脂账本", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = "欢迎使用 轻刻 LiteCal",
@@ -98,9 +125,11 @@ fun OnboardingScreen(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "纯本地隐私存储 · 热量与蛋白质双核追踪 · 自适应真实代谢校准",
+                text = "纯本地存储 · 热量与蛋白质双核 · 自适应代谢校准",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             // 实时科学预算预览卡
@@ -108,12 +137,12 @@ fun OnboardingScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = "初始科学预算预览（记录满 8 天后开启自适应校准）",
@@ -136,34 +165,41 @@ fun OnboardingScreen(
                 }
             }
 
-            // 性别与年龄
+            // 性别均分两栏
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Gender.entries.forEach { g ->
                     FilterChip(
                         selected = gender == g,
                         onClick = { gender = g },
-                        label = { Text("性别：${g.label}") }
+                        modifier = Modifier.weight(1f),
+                        label = {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = g.label, maxLines = 1)
+                            }
+                        }
                     )
                 }
-                OutlinedTextField(
-                    value = ageText,
-                    onValueChange = { ageText = it.filter(Char::isDigit).take(2) },
-                    label = { Text("年龄") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
             }
 
-            // 身高、当前体重、目标体重
+            // 2×2 基础身体数据输入
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                OutlinedTextField(
+                    value = ageText,
+                    onValueChange = { ageText = it.filter(Char::isDigit).take(2) },
+                    label = { Text("年龄 (岁)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
                 OutlinedTextField(
                     value = heightText,
                     onValueChange = { heightText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
@@ -172,6 +208,12 @@ fun OnboardingScreen(
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = startWeightText,
                     onValueChange = { startWeightText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
@@ -190,18 +232,34 @@ fun OnboardingScreen(
                 )
             }
 
-            // 日常活动量
+            // 日常活动量 2×2 网格
             Text("日常活动强度", style = MaterialTheme.typography.titleMedium)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                ActivityLevel.entries.forEach { level ->
-                    FilterChip(
-                        selected = activityLevel == level,
-                        onClick = { activityLevel = level },
-                        label = { Text(level.title) }
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ActivityLevel.entries.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowItems.forEach { level ->
+                            FilterChip(
+                                selected = activityLevel == level,
+                                onClick = { activityLevel = level },
+                                modifier = Modifier.weight(1f),
+                                label = {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = level.title,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
             Text(
@@ -211,10 +269,11 @@ fun OnboardingScreen(
             )
 
             // 期望每周减脂速率
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("期望每周减脂速度", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -227,7 +286,10 @@ fun OnboardingScreen(
                 Slider(
                     value = weeklyLossRate,
                     onValueChange = { weeklyLossRate = (it * 20).roundToInt() / 20f },
-                    valueRange = 0.25f..0.85f
+                    valueRange = 0.25f..0.85f,
+                    colors = SliderDefaults.colors(
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 )
                 Text(
                     text = "推荐每周减 0.4 ~ 0.6 kg，不易掉肌肉也不容易暴食反弹",
@@ -246,7 +308,7 @@ fun OnboardingScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -266,16 +328,6 @@ fun OnboardingScreen(
             }
 
             Spacer(modifier = Modifier.height(6.dp))
-            Button(
-                onClick = { onComplete(draftProfile) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("开启科学减脂账本", style = MaterialTheme.typography.titleMedium)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

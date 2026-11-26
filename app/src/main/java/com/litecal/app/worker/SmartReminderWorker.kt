@@ -59,7 +59,7 @@ class SmartReminderWorker(
                             postGentleNotification(
                                 id = 1002,
                                 title = "今日饮食似乎还没记全？",
-                                body = "补记晚餐或开启「未记全」保护开关，避免拉偏自适应 TDEE 校准"
+                                body = "补记晚餐或标记「今日未记全」，避免影响每日消耗估算"
                             )
                         }
                     }

@@ -105,7 +105,7 @@ fun OnboardingScreen(
                             .height(52.dp),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Text("开启科学减脂账本", style = MaterialTheme.typography.titleMedium)
+                        Text("开始使用", style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -120,16 +120,9 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "欢迎使用 轻刻 LiteCal",
+                text = "轻刻 LiteCal",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "纯本地存储 · 热量与蛋白质双核 · 自适应代谢校准",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
             )
 
             // 实时科学预算预览卡
@@ -144,23 +137,18 @@ fun OnboardingScreen(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "初始科学预算预览（记录满 8 天后开启自适应校准）",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        PreviewMetric("工作日可吃", "${previewBank.todayPlannedBase} kcal")
-                        PreviewMetric("周末可吃", "$weekendTarget kcal")
-                        PreviewMetric("蛋白质目标", "${proteinTarget} g/天")
+                        PreviewMetric("工作日", "${previewBank.todayPlannedBase} kcal")
+                        PreviewMetric("周末", "$weekendTarget kcal")
+                        PreviewMetric("蛋白质", "${proteinTarget} g")
                     }
                     Text(
-                        text = "基础代谢 BMR $bmr kcal · 估算总消耗 TDEE $tdee kcal",
+                        text = "每天大约消耗 $tdee 大卡",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                     )
                 }
             }
@@ -195,7 +183,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = ageText,
                     onValueChange = { ageText = it.filter(Char::isDigit).take(2) },
-                    label = { Text("年龄 (岁)") },
+                    label = { Text("年龄") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
@@ -203,7 +191,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = heightText,
                     onValueChange = { heightText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("身高 (cm)") },
+                    label = { Text("身高 cm") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
@@ -217,7 +205,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = startWeightText,
                     onValueChange = { startWeightText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("当前体重 (kg)") },
+                    label = { Text("体重 kg") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
@@ -225,7 +213,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = targetWeightText,
                     onValueChange = { targetWeightText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("目标体重 (kg)") },
+                    label = { Text("目标 kg") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f)
@@ -233,7 +221,7 @@ fun OnboardingScreen(
             }
 
             // 日常活动量 2×2 网格
-            Text("日常活动强度", style = MaterialTheme.typography.titleMedium)
+            Text("活动强度", style = MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 ActivityLevel.entries.chunked(2).forEach { rowItems ->
                     Row(
@@ -275,9 +263,9 @@ fun OnboardingScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("期望每周减脂速度", style = MaterialTheme.typography.titleMedium)
+                    Text("每周减重", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "${String.format("%.2f", weeklyLossRate)} kg / 周 (日缺口 ~${MetabolismEngine.calculateDailyDeficitTarget(weeklyLossRate)} kcal)",
+                        text = "${String.format("%.2f", weeklyLossRate)} kg",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
@@ -290,11 +278,6 @@ fun OnboardingScreen(
                     colors = SliderDefaults.colors(
                         inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
-                )
-                Text(
-                    text = "推荐每周减 0.4 ~ 0.6 kg，不易掉肌肉也不容易暴食反弹",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -313,9 +296,9 @@ fun OnboardingScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text("开启「周热量银行 · 周末聚餐预留」", style = MaterialTheme.typography.titleMedium)
+                        Text("周末聚餐预留", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "周一至周五每天微存 120 kcal，周六周日每天多享 +300 kcal 聚餐弹性额度",
+                            "工作日 -120 · 周末 +300 kcal",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

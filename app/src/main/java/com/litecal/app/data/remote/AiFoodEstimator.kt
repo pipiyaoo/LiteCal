@@ -14,7 +14,9 @@ import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -78,10 +80,13 @@ class AiFoodEstimator(private val context: Context) {
     ): Result<AiMealEstimateResponse> = withContext(Dispatchers.IO) {
         runCatching {
             if (config.apiKey.isBlank()) {
-                throw IllegalStateException("请先在「词库与设置 → AI 接口配置」中填写 API Key")
+                throw IllegalStateException("请先在「设置 → AI 模型」中填写 API Key")
+            }
+            if (config.baseUrl.isBlank() || config.modelName.isBlank()) {
+                throw IllegalStateException("请先在「设置 → AI 模型」中填写 Base URL 和 Model")
             }
             if (userText.isBlank() && imageUri == null) {
-                throw IllegalArgumentException("请输入一句话饮食描述或选择一张餐食照片")
+                throw IllegalArgumentException("请拍照、选图或输入补充说明")
             }
 
             val base64Jpeg = imageUri?.let { encodeDownscaledJpegBase64(it) }
@@ -112,6 +117,9 @@ class AiFoodEstimator(private val context: Context) {
         runCatching {
             if (config.apiKey.isBlank()) {
                 throw IllegalStateException("API Key 不能为空")
+            }
+            if (config.baseUrl.isBlank() || config.modelName.isBlank()) {
+                throw IllegalStateException("Base URL 和 Model 不能为空")
             }
             val pingPrompt = "请直接回复严格的 JSON: {\"summary\":\"连接成功\",\"items\":[{\"name\":\"水煮鸡蛋\",\"portionDesc\":\"1个\",\"estimatedGrams\":55,\"kcal\":79,\"proteinG\":7.3,\"carbsG\":1.5,\"fatG\":4.8}],\"confidenceNote\":\"ok\"}"
             val reply = when (config.protocol) {
@@ -190,8 +198,13 @@ class AiFoodEstimator(private val context: Context) {
                 ?.get("content")
                 ?: throw IllegalStateException("未找到 choices[0].message.content 字段")
 
-            return contentElement.jsonPrimitive.contentOrNull
-                ?: contentElement.toString()
+            return when (contentElement) {
+                is JsonPrimitive -> contentElement.contentOrNull ?: contentElement.toString()
+                is JsonArray -> contentElement.mapNotNull { part ->
+                    (part as? JsonObject)?.get("text")?.let { (it as? JsonPrimitive)?.contentOrNull }
+                }.joinToString("\n").ifBlank { contentElement.toString() }
+                else -> contentElement.toString()
+            }
         }
     }
 
@@ -305,7 +318,16 @@ class AiFoodEstimator(private val context: Context) {
         }
 
         val out = ByteArrayOutputStream()
-        finalBitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
+        try {
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
+        } finally {
+            if (finalBitmap !== decoded && !decoded.isRecycled) {
+                decoded.recycle()
+            }
+            if (!finalBitmap.isRecycled) {
+                finalBitmap.recycle()
+            }
+        }
         return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 

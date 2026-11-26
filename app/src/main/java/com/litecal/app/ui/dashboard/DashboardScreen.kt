@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -71,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.litecal.app.data.local.ExerciseLogEntity
 import com.litecal.app.data.local.MealLogEntity
 import com.litecal.app.domain.model.MealType
 import com.litecal.app.ui.DashboardUiState
@@ -78,6 +78,7 @@ import com.litecal.app.ui.theme.ProteinAccent
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 fun DashboardScreen(
@@ -87,15 +88,16 @@ fun DashboardScreen(
     onBackToToday: () -> Unit,
     onOpenQuickAdd: (MealType, Int) -> Unit,
     onCopyYesterdayMeal: (MealType) -> Unit,
-    onSaveMealAsCombo: (MealType, String) -> Unit,
     onDeleteMealLog: (MealLogEntity) -> Unit,
+    onLogExercise: (String, Float) -> Unit,
+    onDeleteExercise: (ExerciseLogEntity) -> Unit,
     onRecordWeight: (Float) -> Unit,
     onAddWater: (Int) -> Unit,
     onToggleIncompleteDay: (Boolean) -> Unit,
     onNavigateToTrends: () -> Unit
 ) {
     var showWeightDialog by remember { mutableStateOf(false) }
-    var saveComboForMeal by remember { mutableStateOf<MealType?>(null) }
+    var showExerciseDialog by remember { mutableStateOf(false) }
     var showMacros by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -146,8 +148,16 @@ fun DashboardScreen(
                 mealLogsByType = state.mealLogsByType,
                 onAddClick = { mealType -> onOpenQuickAdd(mealType, 0) },
                 onCopyYesterday = onCopyYesterdayMeal,
-                onSaveAsCombo = { mealType -> saveComboForMeal = mealType },
                 onDeleteLog = onDeleteMealLog
+            )
+        }
+
+        item {
+            ExerciseBurnCard(
+                logs = state.exerciseLogs,
+                totalBurnKcal = state.todayExerciseBurnKcal,
+                onAddClick = { showExerciseDialog = true },
+                onDeleteLog = onDeleteExercise
             )
         }
     }
@@ -155,7 +165,6 @@ fun DashboardScreen(
     if (showWeightDialog) {
         WeightInputDialog(
             initialWeight = state.selectedDateWeightKg ?: state.latestWeightKg ?: state.profile.startWeightKg,
-            selectedDate = state.selectedDate,
             onDismiss = { showWeightDialog = false },
             onConfirm = { w ->
                 onRecordWeight(w)
@@ -164,13 +173,12 @@ fun DashboardScreen(
         )
     }
 
-    saveComboForMeal?.let { mealType ->
-        SaveComboDialog(
-            mealType = mealType,
-            onDismiss = { saveComboForMeal = null },
-            onConfirm = { name ->
-                onSaveMealAsCombo(mealType, name)
-                saveComboForMeal = null
+    if (showExerciseDialog) {
+        ExerciseInputDialog(
+            onDismiss = { showExerciseDialog = false },
+            onConfirm = { name, burn ->
+                onLogExercise(name, burn)
+                showExerciseDialog = false
             }
         )
     }
@@ -210,7 +218,7 @@ private fun DateHeaderBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = if (isToday) "$dateStr · 今天 ($weekLabel)" else "$dateStr ($weekLabel)",
+                text = if (isToday) "$dateStr · 今天" else "$dateStr $weekLabel",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -240,9 +248,7 @@ private fun DateHeaderBar(
                 ) {
                     DropdownMenuItem(
                         text = {
-                            Text(
-                                if (isIncompleteDay) "今日未记全（已开启保护）" else "今日饮食未记全（保护代谢）"
-                            )
+                            Text("今日未记全")
                         },
                         trailingIcon = {
                             if (isIncompleteDay) {
@@ -259,7 +265,7 @@ private fun DateHeaderBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(if (showMacros) "隐藏碳水脂肪明细" else "显示碳水脂肪明细") },
+                        text = { Text("碳水/脂肪") },
                         trailingIcon = {
                             if (showMacros) {
                                 Icon(
@@ -292,7 +298,7 @@ private fun IncompleteDayBanner(onRestore: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = "已标为未记全，今日数据不参与 TDEE 校准",
+            text = "今日未记全 · 不计入代谢",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -396,11 +402,25 @@ private fun DualCoreHeroCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "已吃 ${state.consumedKcal} / ${state.dynamicTargetKcal} kcal",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "已吃 ${state.consumedKcal} / ${state.dynamicTargetKcal}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (state.todayExerciseBurnKcal > 0) {
+                            Text(
+                                text = "含运动 +${state.todayExerciseBurnKcal}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
@@ -414,7 +434,7 @@ private fun DualCoreHeroCard(
                                 color = ProteinAccent
                             )
                             Text(
-                                text = "${state.proteinConsumedG} / ${state.proteinTargetG} g",
+                                text = "${state.proteinConsumedG}/${state.proteinTargetG}g",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = ProteinAccent
@@ -434,12 +454,12 @@ private fun DualCoreHeroCard(
                     state.weeklyBank?.let { bank ->
                         val balance = bank.bankBalanceBeforeToday
                         val pillLabel = when {
-                            balance > 0 -> "本周 +$balance kcal ›"
-                            balance < 0 -> "本周 $balance kcal ›"
+                            balance > 0 -> "本周 +$balance ›"
+                            balance < 0 -> "本周 $balance ›"
                             else -> if (state.profile.weekendReserveEnabled) {
-                                "周末预留中 ›"
+                                "周末预留 ›"
                             } else {
-                                "周银行均衡 ›"
+                                "周银行 ›"
                             }
                         }
                         Box(
@@ -532,7 +552,7 @@ private fun WeightAndWaterStrip(
                         overflow = TextOverflow.Ellipsis
                     )
                     val emaNote = state.selectedDateEmaKg?.let {
-                        "7日均 ${String.format("%.1f", it)}"
+                        "均值 ${String.format("%.1f", it)}"
                     } ?: "点按记录"
                     Text(
                         text = emaNote,
@@ -572,14 +592,14 @@ private fun WeightAndWaterStrip(
                     )
                     Column {
                         Text(
-                            text = "${state.waterMl}/${state.profile.waterTargetMl}",
+                            text = "${state.waterMl}/${state.profile.waterTargetMl} ml",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "ml 饮水",
+                            text = "饮水",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -606,7 +626,6 @@ private fun UnifiedMealsCard(
     mealLogsByType: Map<MealType, List<MealLogEntity>>,
     onAddClick: (MealType) -> Unit,
     onCopyYesterday: (MealType) -> Unit,
-    onSaveAsCombo: (MealType) -> Unit,
     onDeleteLog: (MealLogEntity) -> Unit
 ) {
     Card(
@@ -630,7 +649,6 @@ private fun UnifiedMealsCard(
                     logs = logs,
                     onAddClick = { onAddClick(mealType) },
                     onCopyYesterday = { onCopyYesterday(mealType) },
-                    onSaveAsCombo = { onSaveAsCombo(mealType) },
                     onDeleteLog = onDeleteLog
                 )
             }
@@ -645,11 +663,10 @@ private fun MealSectionRow(
     logs: List<MealLogEntity>,
     onAddClick: () -> Unit,
     onCopyYesterday: () -> Unit,
-    onSaveAsCombo: () -> Unit,
     onDeleteLog: (MealLogEntity) -> Unit
 ) {
-    val mealKcal = logs.sumOf { it.totalKcal.toDouble() }.toInt()
-    val mealProt = logs.sumOf { it.proteinG.toDouble() }.toInt()
+    val mealKcal = logs.sumOf { it.totalKcal.toDouble() }.roundToInt()
+    val mealProt = logs.sumOf { it.proteinG.toDouble() }.roundToInt()
     var mealMenuExpanded by remember { mutableStateOf(false) }
 
     Column(
@@ -703,7 +720,7 @@ private fun MealSectionRow(
                         onDismissRequest = { mealMenuExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("复制昨日${mealType.label}") },
+                            text = { Text("复制昨日") },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.ContentCopy,
@@ -716,22 +733,6 @@ private fun MealSectionRow(
                                 onCopyYesterday()
                             }
                         )
-                        if (logs.size >= 2) {
-                            DropdownMenuItem(
-                                text = { Text("存为常吃套餐") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.BookmarkAdd,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                },
-                                onClick = {
-                                    mealMenuExpanded = false
-                                    onSaveAsCombo()
-                                }
-                            )
-                        }
                     }
                 }
 
@@ -810,7 +811,7 @@ private fun MealSectionRow(
                                 )
                             }
                             Text(
-                                text = "${item.totalKcal.toInt()} kcal",
+                                text = "${item.totalKcal.roundToInt()} kcal",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -823,29 +824,157 @@ private fun MealSectionRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WeightInputDialog(
-    initialWeight: Float,
-    selectedDate: LocalDate,
-    onDismiss: () -> Unit,
-    onConfirm: (Float) -> Unit
+private fun ExerciseBurnCard(
+    logs: List<ExerciseLogEntity>,
+    totalBurnKcal: Int,
+    onAddClick: () -> Unit,
+    onDeleteLog: (ExerciseLogEntity) -> Unit
 ) {
-    var weightInput by remember { mutableStateOf(String.format("%.1f", initialWeight)) }
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (logs.isEmpty()) Modifier.clickable { onAddClick() } else Modifier)
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "🏃 运动消耗",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (totalBurnKcal > 0) {
+                        Text(
+                            text = "+$totalBurnKcal 大卡",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onAddClick,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "添加运动消耗",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            if (logs.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                logs.forEach { item ->
+                    key(item.id) {
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.EndToStart) {
+                                    onDeleteLog(item)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        )
+
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            enableDismissFromStartToEnd = false,
+                            backgroundContent = {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.errorContainer)
+                                        .padding(horizontal = 14.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteOutline,
+                                        contentDescription = "左滑删除",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = item.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                                )
+                                Text(
+                                    text = "+${item.burnKcal.roundToInt()} 大卡",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseInputDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, Float) -> Unit
+) {
+    var burnText by remember { mutableStateOf("") }
+    var nameText by remember { mutableStateOf("") }
+    val burnVal = burnText.toFloatOrNull() ?: 0f
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("记录晨重 ($selectedDate)") },
+        title = { Text("记录运动消耗") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "建议每天早上起床排空后称重。单日涨跌多为水分，请以 7 日平滑趋势为准。",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = burnText,
+                    onValueChange = { burnText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
+                    label = { Text("消耗热量 (大卡)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = weightInput,
-                    onValueChange = { weightInput = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("体重 (kg)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    value = nameText,
+                    onValueChange = { nameText = it },
+                    label = { Text("运动项目（选填）") },
+                    placeholder = { Text("如：力量训练、跑步") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -853,10 +982,8 @@ private fun WeightInputDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val v = weightInput.toFloatOrNull()
-                    if (v != null && v in 30f..250f) onConfirm(v)
-                }
+                onClick = { if (burnVal > 0f) onConfirm(nameText, burnVal) },
+                enabled = burnVal > 0f
             ) {
                 Text("保存")
             }
@@ -868,29 +995,32 @@ private fun WeightInputDialog(
 }
 
 @Composable
-private fun SaveComboDialog(
-    mealType: MealType,
+private fun WeightInputDialog(
+    initialWeight: Float,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (Float) -> Unit
 ) {
-    var name by remember { mutableStateOf("我的常吃${mealType.label}") }
+    var weightInput by remember { mutableStateOf(String.format("%.1f", initialWeight)) }
+    val validWeight = weightInput.toFloatOrNull()?.takeIf { it in 30f..250f }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("保存为常吃套餐模板") },
+        title = { Text("记录体重") },
         text = {
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("套餐名称（下次可一键整餐入账）") },
+                value = weightInput,
+                onValueChange = { weightInput = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
+                label = { Text("体重 (kg)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
         },
         confirmButton = {
             Button(
-                onClick = { if (name.isNotBlank()) onConfirm(name) }
+                onClick = { validWeight?.let(onConfirm) },
+                enabled = validWeight != null
             ) {
-                Text("保存模板")
+                Text("保存")
             }
         },
         dismissButton = {

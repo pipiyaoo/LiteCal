@@ -9,10 +9,10 @@ enum class Gender(val label: String) {
 }
 
 enum class ActivityLevel(val factor: Float, val title: String, val subtitle: String) {
-    SEDENTARY(1.2f, "久坐办公", "日常几乎不运动，上下班通勤为主"),
-    LIGHT(1.375f, "轻度活动", "每周运动 1~3 次，或日均步数 6000~9000"),
-    MODERATE(1.55f, "中度活动", "每周规律运动 3~5 次，训练强度适中"),
-    ACTIVE(1.725f, "高频训练", "每周高强度训练 6~7 次或体力工作")
+    SEDENTARY(1.2f, "久坐办公", "几乎不运动"),
+    LIGHT(1.375f, "轻度活动", "每周 1~3 次运动"),
+    MODERATE(1.55f, "中度活动", "每周 3~5 次运动"),
+    ACTIVE(1.725f, "高频训练", "每周 6~7 次训练")
 }
 
 enum class MealType(val label: String, val emoji: String, val sortOrder: Int) {
@@ -32,8 +32,8 @@ enum class MealType(val label: String, val emoji: String, val sortOrder: Int) {
 }
 
 enum class AiProviderProtocol(val label: String) {
-    OPENAI_COMPATIBLE("OpenAI 兼容协议 (通义千问/豆包/硅基流动等)"),
-    GEMINI_NATIVE("Google Gemini 原生协议")
+    OPENAI_COMPATIBLE("OpenAI 兼容"),
+    GEMINI_NATIVE("Gemini 原生")
 }
 
 data class UserProfile(

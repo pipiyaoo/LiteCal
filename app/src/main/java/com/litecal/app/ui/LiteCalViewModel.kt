@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.litecal.app.data.local.BodyMetricEntity
+import com.litecal.app.data.local.DailyExerciseSum
+import com.litecal.app.data.local.ExerciseLogEntity
 import com.litecal.app.data.local.FoodItemEntity
 import com.litecal.app.data.local.MealComboWithItems
 import com.litecal.app.data.local.MealLogEntity
@@ -58,6 +60,8 @@ data class DashboardUiState(
     val latestWeightKg: Float? = null,
     val latestEmaKg: Float? = null,
     val mealLogsByType: Map<MealType, List<MealLogEntity>> = emptyMap(),
+    val exerciseLogs: List<ExerciseLogEntity> = emptyList(),
+    val todayExerciseBurnKcal: Int = 0,
     val tdeeResult: AdaptiveTdeeResult? = null,
     val weeklyBank: WeeklyBankState? = null,
     val weightSeries: List<WeightTrendPoint> = emptyList(),
@@ -108,13 +112,22 @@ class LiteCalViewModel(
         val rangeEnd = date.with(DayOfWeek.MONDAY).plusDays(6).let { sun ->
             if (sun.isAfter(LocalDate.now())) sun else LocalDate.now()
         }
-        combine(
+        val mealAndOverrideFlow = combine(
             repository.observeMealsForDate(date),
             repository.observeOverrideForDate(date),
             repository.observeSumsInRange(rangeStart, rangeEnd),
             repository.observeOverridesInRange(rangeStart, rangeEnd)
         ) { meals, override, sums, overrides ->
-            DateWindowData(date, meals, override, sums, overrides)
+            DateWindowData(date, meals, override, sums, overrides, emptyList(), emptyList())
+        }
+        val exerciseFlow = combine(
+            repository.observeExercisesForDate(date),
+            repository.observeExerciseSumsInRange(rangeStart, rangeEnd)
+        ) { exercises, exerciseSums ->
+            exercises to exerciseSums
+        }
+        combine(mealAndOverrideFlow, exerciseFlow) { base, (exercises, exerciseSums) ->
+            base.copy(exercises = exercises, exerciseSums = exerciseSums)
         }
     }
 
@@ -125,6 +138,7 @@ class LiteCalViewModel(
     ) { profile, window, allMetrics ->
         val date = window.date
         val intakeMap = window.sums.associate { LocalDate.parse(it.dateIso) to it.totalKcal }
+        val exerciseMap = window.exerciseSums.associate { LocalDate.parse(it.dateIso) to it.totalBurnKcal }
         val incompleteSet = window.overrides
             .filter { it.isIncompleteDay }
             .map { LocalDate.parse(it.dateIso) }
@@ -141,7 +155,8 @@ class LiteCalViewModel(
             today = date,
             dailyIntakeMap = intakeMap,
             incompleteDates = incompleteSet,
-            rawWeights = rawWeights
+            rawWeights = rawWeights,
+            dailyExerciseMap = exerciseMap
         )
 
         val bankState = MetabolismEngine.computeWeeklyCalorieBank(
@@ -150,13 +165,15 @@ class LiteCalViewModel(
             estimatedTdee = tdeeRes.estimatedTdee,
             bmr = tdeeRes.bmr,
             weekIntakes = intakeMap,
-            incompleteDates = incompleteSet
+            incompleteDates = incompleteSet,
+            weekExercises = exerciseMap
         )
 
         val consumedKcal = window.meals.sumOf { it.totalKcal.toDouble() }.roundToInt()
         val consumedProtein = window.meals.sumOf { it.proteinG.toDouble() }.roundToInt()
         val consumedCarbs = window.meals.sumOf { it.carbsG.toDouble() }.roundToInt()
         val consumedFat = window.meals.sumOf { it.fatG.toDouble() }.roundToInt()
+        val todayExerciseBurn = window.exercises.sumOf { it.burnKcal.toDouble() }.roundToInt()
         val proteinTarget = MetabolismEngine.calculateProteinTargetG(profile)
 
         val groupedMeals = MealType.entries.associateWith { type ->
@@ -194,6 +211,8 @@ class LiteCalViewModel(
             latestWeightKg = latestMeasuredWeight,
             latestEmaKg = emaSeries[LocalDate.now()],
             mealLogsByType = groupedMeals,
+            exerciseLogs = window.exercises,
+            todayExerciseBurnKcal = todayExerciseBurn,
             tdeeResult = tdeeRes,
             weeklyBank = bankState,
             weightSeries = weightPoints,
@@ -231,7 +250,7 @@ class LiteCalViewModel(
             repository.saveProfile(completed)
             repository.recordWeight(LocalDate.now(), completed.startWeightKg)
             reminderScheduler.syncSchedules(completed)
-            _snackbarEvents.emit("减脂计划已创建，开始轻刻记录吧！")
+            _snackbarEvents.emit("已开始记录")
         }
     }
 
@@ -239,19 +258,19 @@ class LiteCalViewModel(
         viewModelScope.launch {
             repository.saveProfile(profile)
             reminderScheduler.syncSchedules(profile)
-            _snackbarEvents.emit("减脂目标与提醒设置已保存")
+            _snackbarEvents.emit("已保存")
         }
     }
 
     fun saveAiConfig(config: AiConfig) {
         repository.saveAiConfig(config)
         viewModelScope.launch {
-            _snackbarEvents.emit("AI 接口配置已加密保存至本地")
+            _snackbarEvents.emit("已保存")
         }
     }
 
     fun testAiConnection(config: AiConfig) {
-        _aiTestMessage.value = "正在测试连通性..."
+        _aiTestMessage.value = "测试中..."
         viewModelScope.launch {
             val res = repository.testAiConnection(config)
             _aiTestMessage.value = res.fold(
@@ -277,29 +296,25 @@ class LiteCalViewModel(
         }
     }
 
-    fun logQuickEntry(
+    fun logManualEntry(
         mealType: MealType,
         title: String,
-        portionDesc: String,
         kcal: Float,
-        proteinG: Float,
-        carbsG: Float,
-        fatG: Float,
-        saveAsTemplate: Boolean
+        proteinG: Float
     ) {
         viewModelScope.launch {
             repository.logQuickCalories(
                 date = _selectedDate.value,
                 mealType = mealType,
                 title = title,
-                portionDesc = portionDesc,
+                portionDesc = "手动填写",
                 kcal = kcal,
                 proteinG = proteinG,
-                carbsG = carbsG,
-                fatG = fatG,
-                saveAsTemplate = saveAsTemplate
+                carbsG = 0f,
+                fatG = 0f,
+                saveAsTemplate = false
             )
-            _snackbarEvents.emit("已记入${mealType.label} ${kcal.roundToInt()} kcal")
+            _snackbarEvents.emit("已记入${mealType.label}")
             dismissQuickSheet()
         }
     }
@@ -310,7 +325,7 @@ class LiteCalViewModel(
             val result = repository.estimateMealWithAi(text, imageUri)
             _aiUiState.value = result.fold(
                 onSuccess = { AiUiState.Success(it) },
-                onFailure = { AiUiState.Error(it.message ?: "估算失败，请检查网络或 API 配置") }
+                onFailure = { AiUiState.Error(it.message ?: "测算失败，请检查 AI 设置") }
             )
         }
     }
@@ -322,9 +337,7 @@ class LiteCalViewModel(
     fun confirmAiMeal(
         mealType: MealType,
         response: AiMealEstimateResponse,
-        multiplier: Float,
-        saveToTemplates: Boolean,
-        comboName: String?
+        multiplier: Float
     ) {
         viewModelScope.launch {
             repository.confirmAiMealItems(
@@ -332,15 +345,10 @@ class LiteCalViewModel(
                 mealType = mealType,
                 items = response.items,
                 portionMultiplier = multiplier,
-                saveToTemplates = saveToTemplates,
-                saveAsComboName = comboName
+                saveToTemplates = false,
+                saveAsComboName = null
             )
-            val msg = if (saveToTemplates || !comboName.isNullOrBlank()) {
-                "AI 估算已入账并沉淀到本地常吃库！"
-            } else {
-                "AI 估算已记入${mealType.label}"
-            }
-            _snackbarEvents.emit(msg)
+            _snackbarEvents.emit("已记入${mealType.label}")
             dismissQuickSheet()
         }
     }
@@ -348,7 +356,7 @@ class LiteCalViewModel(
     fun deleteMealLog(log: MealLogEntity) {
         viewModelScope.launch {
             repository.deleteMealLog(log)
-            _snackbarEvents.emit("已移除记录：${log.foodName}")
+            _snackbarEvents.emit("已删除")
         }
     }
 
@@ -356,18 +364,9 @@ class LiteCalViewModel(
         viewModelScope.launch {
             val count = repository.copyPreviousDayMeal(_selectedDate.value, mealType)
             if (count > 0) {
-                _snackbarEvents.emit("已复制昨日${mealType.label}（共 $count 项）")
+                _snackbarEvents.emit("已复制昨日${mealType.label}")
             } else {
-                _snackbarEvents.emit("昨日${mealType.label}暂无记录可复制")
-            }
-        }
-    }
-
-    fun saveMealCardAsCombo(mealType: MealType, comboName: String) {
-        viewModelScope.launch {
-            val ok = repository.saveTodayMealAsCombo(_selectedDate.value, mealType, comboName)
-            if (ok) {
-                _snackbarEvents.emit("已将本餐保存为套餐「$comboName」")
+                _snackbarEvents.emit("昨日无记录")
             }
         }
     }
@@ -381,26 +380,35 @@ class LiteCalViewModel(
     fun toggleIncompleteDay(incomplete: Boolean) {
         viewModelScope.launch {
             repository.setIncompleteDay(_selectedDate.value, incomplete)
-            val tip = if (incomplete) {
-                "已标记未记全，今日数据将不参与自适应 TDEE 校准"
-            } else {
-                "已恢复为完整记录日"
-            }
-            _snackbarEvents.emit(tip)
+            _snackbarEvents.emit(if (incomplete) "已标为未记全" else "已恢复")
         }
     }
 
     fun recordWeight(weightKg: Float) {
         viewModelScope.launch {
             repository.recordWeight(_selectedDate.value, weightKg)
-            _snackbarEvents.emit("已记录体重 ${String.format("%.1f", weightKg)} kg")
+            _snackbarEvents.emit("已保存")
         }
     }
 
     fun recordBodyShape(waistCm: Float?, bodyFatPct: Float?) {
         viewModelScope.launch {
             repository.recordBodyShape(_selectedDate.value, waistCm, bodyFatPct)
-            _snackbarEvents.emit("围度与体脂记录已更新")
+            _snackbarEvents.emit("已保存")
+        }
+    }
+
+    fun logExercise(name: String, burnKcal: Float) {
+        viewModelScope.launch {
+            repository.logExercise(_selectedDate.value, name, burnKcal)
+            _snackbarEvents.emit("已记运动 +${burnKcal.roundToInt()} 大卡")
+        }
+    }
+
+    fun deleteExercise(log: ExerciseLogEntity) {
+        viewModelScope.launch {
+            repository.deleteExercise(log)
+            _snackbarEvents.emit("已删除")
         }
     }
 
@@ -462,5 +470,7 @@ private data class DateWindowData(
     val meals: List<MealLogEntity>,
     val override: com.litecal.app.data.local.DailyOverrideEntity?,
     val sums: List<com.litecal.app.data.local.DailyCalorieSum>,
-    val overrides: List<com.litecal.app.data.local.DailyOverrideEntity>
+    val overrides: List<com.litecal.app.data.local.DailyOverrideEntity>,
+    val exercises: List<ExerciseLogEntity>,
+    val exerciseSums: List<DailyExerciseSum>
 )

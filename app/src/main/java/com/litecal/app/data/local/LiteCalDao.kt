@@ -131,4 +131,34 @@ interface LiteCalDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBodyMetric(metric: BodyMetricEntity)
+
+    // --- Exercise Burn Logs ---
+    @Query("SELECT * FROM exercise_logs WHERE dateIso = :dateIso ORDER BY createdAt ASC")
+    fun observeExerciseLogsForDate(dateIso: String): Flow<List<ExerciseLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExerciseLog(log: ExerciseLogEntity): Long
+
+    @Delete
+    suspend fun deleteExerciseLog(log: ExerciseLogEntity)
+
+    @Query(
+        """
+        SELECT dateIso, SUM(burnKcal) AS totalBurnKcal
+        FROM exercise_logs
+        WHERE dateIso >= :startDateIso AND dateIso <= :endDateIso
+        GROUP BY dateIso
+        """
+    )
+    fun observeExerciseSumsInRange(startDateIso: String, endDateIso: String): Flow<List<DailyExerciseSum>>
+
+    @Query(
+        """
+        SELECT dateIso, SUM(burnKcal) AS totalBurnKcal
+        FROM exercise_logs
+        WHERE dateIso >= :startDateIso AND dateIso <= :endDateIso
+        GROUP BY dateIso
+        """
+    )
+    suspend fun getExerciseSumsInRangeOnce(startDateIso: String, endDateIso: String): List<DailyExerciseSum>
 }

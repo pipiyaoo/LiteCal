@@ -105,8 +105,25 @@ data class BodyMetricEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(
+    tableName = "exercise_logs",
+    indices = [Index(value = ["dateIso"])]
+)
+data class ExerciseLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val dateIso: String, // YYYY-MM-DD
+    val name: String,
+    val burnKcal: Float,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 data class DailyCalorieSum(
     val dateIso: String,
     val totalKcal: Float,
     val totalProteinG: Float
+)
+
+data class DailyExerciseSum(
+    val dateIso: String,
+    val totalBurnKcal: Float
 )

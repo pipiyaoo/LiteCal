@@ -158,12 +158,17 @@ class UserPrefsStore(private val context: Context) {
     }
 
     fun saveAiConfig(config: AiConfig) {
+        val cleaned = config.copy(
+            baseUrl = config.baseUrl.trim(),
+            apiKey = config.apiKey.trim(),
+            modelName = config.modelName.trim()
+        )
         encryptedPrefs.edit()
-            .putString("protocol", config.protocol.name)
-            .putString("base_url", config.baseUrl.trim())
-            .putString("api_key", config.apiKey.trim())
-            .putString("model_name", config.modelName.trim())
+            .putString("protocol", cleaned.protocol.name)
+            .putString("base_url", cleaned.baseUrl)
+            .putString("api_key", cleaned.apiKey)
+            .putString("model_name", cleaned.modelName)
             .apply()
-        _aiConfigFlow.value = config
+        _aiConfigFlow.value = cleaned
     }
 }

@@ -109,7 +109,8 @@ object MetabolismEngine {
         today: LocalDate,
         dailyIntakeMap: Map<LocalDate, Float>,
         incompleteDates: Set<LocalDate>,
-        rawWeights: Map<LocalDate, Float>
+        rawWeights: Map<LocalDate, Float>,
+        dailyExerciseMap: Map<LocalDate, Float> = emptyMap()
     ): AdaptiveTdeeResult {
         val latestWeight = rawWeights
             .filterKeys { !it.isAfter(today) }
@@ -154,13 +155,14 @@ object MetabolismEngine {
         }
 
         val avgIntake = validDaysInWindow.map { dailyIntakeMap.getValue(it) }.average().toFloat()
+        val avgExercise = validDaysInWindow.map { dailyExerciseMap[it] ?: 0f }.average().toFloat()
         val emaStart = emaSeries.getValue(windowStart)
         val emaEnd = emaSeries.getValue(windowEnd)
         val weightDelta14d = emaEnd - emaStart
         val dailyWeightDelta = weightDelta14d / 14f
 
-        // 能量守恒: 真实消耗 = 平均摄入 - (每日平滑体重变化 * 7700)
-        val rawTdee = (avgIntake - dailyWeightDelta * KCAL_PER_KG_BODY_FAT)
+        // 能量守恒: 非运动日常消耗 = 平均摄入 - 平均手动运动消耗 - (每日平滑体重变化 * 7700)
+        val rawTdee = (avgIntake - avgExercise - dailyWeightDelta * KCAL_PER_KG_BODY_FAT)
             .coerceIn(bmr * 1.05f, bmr * 2.4f)
 
         // 按有效天数平滑提升自适应权重 (8天 -> 0.35, 14天 -> 0.70)，并限制偏离幅度防剧烈跳变
@@ -196,7 +198,8 @@ object MetabolismEngine {
         estimatedTdee: Int,
         bmr: Int,
         weekIntakes: Map<LocalDate, Float>,
-        incompleteDates: Set<LocalDate>
+        incompleteDates: Set<LocalDate>,
+        weekExercises: Map<LocalDate, Float> = emptyMap()
     ): WeeklyBankState {
         val monday = today.with(DayOfWeek.MONDAY)
         val safetyFloor = maxOf((bmr * 0.85f).roundToInt(), 1200)
@@ -211,10 +214,12 @@ object MetabolismEngine {
         val weekendBonus = ((weekdaySave * 5) / 2f).roundToInt()
 
         fun plannedFor(date: LocalDate): Int {
-            return when (date.dayOfWeek) {
+            val base = when (date.dayOfWeek) {
                 DayOfWeek.SATURDAY, DayOfWeek.SUNDAY -> baseDailyBudget + weekendBonus
                 else -> baseDailyBudget - weekdaySave
             }
+            val exerciseBurn = (weekExercises[date] ?: 0f).roundToInt().coerceAtLeast(0)
+            return base + exerciseBurn
         }
 
         val dayLabels = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")

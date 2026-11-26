@@ -10,10 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -75,11 +75,11 @@ class MainActivity : ComponentActivity() {
     private fun handleWidgetIntent(intent: Intent?) {
         val defaultMeal = MealType.defaultForHour(LocalTime.now().hour)
         when (intent?.action) {
-            ACTION_QUICK_ADD -> {
+            ACTION_AI_SCAN -> {
                 viewModel.selectDate(LocalDate.now())
                 viewModel.openQuickSheet(mealType = defaultMeal, initialTab = 0)
             }
-            ACTION_AI_SCAN -> {
+            ACTION_QUICK_ADD -> {
                 viewModel.selectDate(LocalDate.now())
                 viewModel.openQuickSheet(mealType = defaultMeal, initialTab = 1)
             }
@@ -96,9 +96,6 @@ class MainActivity : ComponentActivity() {
 fun LiteCalRootApp(viewModel: LiteCalViewModel) {
     val uiState by viewModel.dashboardState.collectAsStateWithLifecycle()
     val quickSheetReq by viewModel.quickSheetState.collectAsStateWithLifecycle()
-    val frequentFoods by viewModel.frequentFoodsFlow.collectAsStateWithLifecycle()
-    val allFoods by viewModel.allFoodsFlow.collectAsStateWithLifecycle()
-    val mealCombos by viewModel.mealCombosFlow.collectAsStateWithLifecycle()
     val aiConfig by viewModel.aiConfigFlow.collectAsStateWithLifecycle()
     val aiUiState by viewModel.aiUiState.collectAsStateWithLifecycle()
     val aiTestMessage by viewModel.aiTestMessage.collectAsStateWithLifecycle()
@@ -166,8 +163,8 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
                 NavigationBarItem(
                     selected = currentTab == 2,
                     onClick = { currentTab = 2 },
-                    icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
-                    label = { Text("词库与设置") }
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("设置") }
                 )
             }
         }
@@ -185,8 +182,9 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
                     onBackToToday = { viewModel.selectDate(LocalDate.now()) },
                     onOpenQuickAdd = viewModel::openQuickSheet,
                     onCopyYesterdayMeal = viewModel::copyYesterdayMeal,
-                    onSaveMealAsCombo = viewModel::saveMealCardAsCombo,
                     onDeleteMealLog = viewModel::deleteMealLog,
+                    onLogExercise = viewModel::logExercise,
+                    onDeleteExercise = viewModel::deleteExercise,
                     onRecordWeight = viewModel::recordWeight,
                     onAddWater = viewModel::addWater,
                     onToggleIncompleteDay = viewModel::toggleIncompleteDay,
@@ -202,14 +200,9 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
                     profile = uiState.profile,
                     aiConfig = aiConfig,
                     aiTestMessage = aiTestMessage,
-                    allFoods = allFoods,
-                    combos = mealCombos,
                     onSaveAiConfig = viewModel::saveAiConfig,
                     onTestAiConfig = viewModel::testAiConnection,
-                    onUpdateProfile = viewModel::updateUserProfile,
-                    onCreateCustomFood = viewModel::createCustomFood,
-                    onDeleteCustomFood = viewModel::deleteCustomFood,
-                    onDeleteCombo = viewModel::deleteCombo
+                    onUpdateProfile = viewModel::updateUserProfile
                 )
             }
         }
@@ -219,18 +212,12 @@ fun LiteCalRootApp(viewModel: LiteCalViewModel) {
         QuickLogSheet(
             initialMealType = req.mealType,
             initialTab = req.initialTab,
-            frequentFoods = frequentFoods,
-            allFoods = allFoods,
-            mealCombos = mealCombos,
             aiUiState = aiUiState,
             onDismiss = viewModel::dismissQuickSheet,
-            onLogFood = viewModel::logLibraryFood,
-            onLogCombo = viewModel::logCombo,
-            onToggleFavorite = viewModel::toggleFavorite,
             onRunAiEstimate = viewModel::runAiEstimation,
             onResetAiEstimate = viewModel::resetAiEstimation,
             onConfirmAiEstimate = viewModel::confirmAiMeal,
-            onLogQuickEntry = viewModel::logQuickEntry
+            onLogManualEntry = viewModel::logManualEntry
         )
     }
 }
@@ -258,8 +245,9 @@ fun DashboardPreview() {
             onBackToToday = {},
             onOpenQuickAdd = { _, _ -> },
             onCopyYesterdayMeal = {},
-            onSaveMealAsCombo = { _, _ -> },
             onDeleteMealLog = {},
+            onLogExercise = { _, _ -> },
+            onDeleteExercise = {},
             onRecordWeight = {},
             onAddWater = {},
             onToggleIncompleteDay = {},

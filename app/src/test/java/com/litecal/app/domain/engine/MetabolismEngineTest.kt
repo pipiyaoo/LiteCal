@@ -139,4 +139,32 @@ class MetabolismEngineTest {
         assertEquals(extremeState.safetyFloorKcal, extremeState.todayDynamicTarget)
         assertFalse(extremeState.todayDynamicTarget < 1200)
     }
+
+    @Test
+    fun `computeWeeklyCalorieBank adds manual exercise burn 1-to-1 to today budget`() {
+        val wednesday = LocalDate.of(2026, 11, 25)
+        val bmr = 1709
+        val tdee = 2350
+
+        val baseState = MetabolismEngine.computeWeeklyCalorieBank(
+            today = wednesday,
+            profile = sampleProfile,
+            estimatedTdee = tdee,
+            bmr = bmr,
+            weekIntakes = emptyMap(),
+            incompleteDates = emptySet(),
+            weekExercises = emptyMap()
+        )
+        val withWorkoutState = MetabolismEngine.computeWeeklyCalorieBank(
+            today = wednesday,
+            profile = sampleProfile,
+            estimatedTdee = tdee,
+            bmr = bmr,
+            weekIntakes = emptyMap(),
+            incompleteDates = emptySet(),
+            weekExercises = mapOf(wednesday to 350f)
+        )
+
+        assertEquals(baseState.todayDynamicTarget + 350, withWorkoutState.todayDynamicTarget)
+    }
 }

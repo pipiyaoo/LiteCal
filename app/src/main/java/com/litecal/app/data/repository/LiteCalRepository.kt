@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.litecal.app.data.local.BodyMetricEntity
 import com.litecal.app.data.local.DailyOverrideEntity
+import com.litecal.app.data.local.ExerciseLogEntity
 import com.litecal.app.data.local.FoodItemEntity
 import com.litecal.app.data.local.LiteCalDao
 import com.litecal.app.data.local.MealComboEntity
@@ -61,6 +62,29 @@ class LiteCalRepository(
 
     fun observeOverridesInRange(start: LocalDate, end: LocalDate) =
         dao.observeOverridesInRange(start.toString(), end.toString())
+
+    fun observeExercisesForDate(date: LocalDate): Flow<List<ExerciseLogEntity>> =
+        dao.observeExerciseLogsForDate(date.toString())
+
+    fun observeExerciseSumsInRange(start: LocalDate, end: LocalDate) =
+        dao.observeExerciseSumsInRange(start.toString(), end.toString())
+
+    suspend fun logExercise(date: LocalDate, name: String, burnKcal: Float) {
+        val cleanName = name.trim().ifBlank { "运动健身" }
+        dao.insertExerciseLog(
+            ExerciseLogEntity(
+                dateIso = date.toString(),
+                name = cleanName,
+                burnKcal = burnKcal.coerceAtLeast(0f)
+            )
+        )
+        refreshWidget()
+    }
+
+    suspend fun deleteExercise(log: ExerciseLogEntity) {
+        dao.deleteExerciseLog(log)
+        refreshWidget()
+    }
 
     suspend fun saveProfile(profile: UserProfile) {
         prefs.saveUserProfile(profile)
@@ -398,9 +422,11 @@ class LiteCalRepository(
         val sunday = today.with(DayOfWeek.MONDAY).plusDays(6)
         val sums = dao.getDailySumsInRangeOnce(startRange.toString(), sunday.toString())
         val overrides = dao.getOverridesInRangeOnce(startRange.toString(), sunday.toString())
+        val exerciseSums = dao.getExerciseSumsInRangeOnce(startRange.toString(), sunday.toString())
         val metrics = dao.getAllBodyMetricsOnce()
 
         val intakeMap = sums.associate { LocalDate.parse(it.dateIso) to it.totalKcal }
+        val exerciseMap = exerciseSums.associate { LocalDate.parse(it.dateIso) to it.totalBurnKcal }
         val incompleteSet = overrides.filter { it.isIncompleteDay }
             .map { LocalDate.parse(it.dateIso) }
             .toSet()
@@ -413,7 +439,8 @@ class LiteCalRepository(
             today = today,
             dailyIntakeMap = intakeMap,
             incompleteDates = incompleteSet,
-            rawWeights = weightMap
+            rawWeights = weightMap,
+            dailyExerciseMap = exerciseMap
         )
         val bank: WeeklyBankState = MetabolismEngine.computeWeeklyCalorieBank(
             today = today,
@@ -421,7 +448,8 @@ class LiteCalRepository(
             estimatedTdee = tdeeRes.estimatedTdee,
             bmr = tdeeRes.bmr,
             weekIntakes = intakeMap,
-            incompleteDates = incompleteSet
+            incompleteDates = incompleteSet,
+            weekExercises = exerciseMap
         )
 
         val todaySum = sums.find { it.dateIso == today.toString() }

@@ -50,6 +50,7 @@ import com.litecal.app.domain.model.WeeklyBankState
 import com.litecal.app.ui.DashboardUiState
 import com.litecal.app.ui.WeightTrendPoint
 import com.litecal.app.ui.theme.AmberSecondaryLight
+import kotlin.math.abs
 import kotlin.math.max
 
 @Composable
@@ -63,23 +64,18 @@ fun TrendsScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "趋势与真实代谢复盘",
+                text = "趋势",
                 style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                text = "用 7 日平滑趋势过滤水分涨跌，用真实能量守恒校准每日消耗",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
         item {
-            WeightEmaChartCard(
+            WeightTrendCard(
                 points = state.weightSeries,
                 startWeight = state.profile.startWeightKg,
                 targetWeight = state.profile.targetWeightKg,
@@ -89,13 +85,16 @@ fun TrendsScreen(
 
         state.weeklyBank?.let { bank ->
             item {
-                WeeklyCalorieBankCard(bank = bank)
+                WeeklyIntakeCard(bank = bank)
             }
         }
 
         state.tdeeResult?.let { tdee ->
             item {
-                AdaptiveTdeeCard(tdee = tdee)
+                DailyBurnCard(
+                    tdee = tdee,
+                    todayExerciseBurnKcal = state.todayExerciseBurnKcal
+                )
             }
         }
 
@@ -106,7 +105,7 @@ fun TrendsScreen(
             )
         }
 
-        item { Spacer(modifier = Modifier.height(28.dp)) }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 
     if (showShapeDialog) {
@@ -124,7 +123,7 @@ fun TrendsScreen(
 }
 
 @Composable
-private fun WeightEmaChartCard(
+private fun WeightTrendCard(
     points: List<WeightTrendPoint>,
     startWeight: Float,
     targetWeight: Float,
@@ -134,22 +133,25 @@ private fun WeightEmaChartCard(
     val diffToGoal = (currentDisplay - targetWeight).coerceAtLeast(0f)
 
     Card(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text("体重变化", style = MaterialTheme.typography.titleMedium)
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MetricCol("初始体重", "${String.format("%.1f", startWeight)} kg")
-                MetricCol("当前7日平滑", "${String.format("%.1f", currentDisplay)} kg", highlight = true)
-                MetricCol("距目标体重", "${String.format("%.1f", diffToGoal)} kg")
+                MetricCol("起始", "${String.format("%.1f", startWeight)} kg")
+                MetricCol("近期走势", "${String.format("%.1f", currentDisplay)} kg", highlight = true)
+                MetricCol("还需减", "${String.format("%.1f", diffToGoal)} kg")
             }
 
             if (points.size < 2) {
@@ -157,10 +159,10 @@ private fun WeightEmaChartCard(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(110.dp)
                 ) {
                     Text(
-                        text = "连续记录 2 天以上晨重后，这里将绘制「原始晨重散点 + 7日平滑曲线」",
+                        text = "再记 1 天体重就能看到走势图",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -177,8 +179,8 @@ private fun WeightEmaChartCard(
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(185.dp)
-                        .padding(vertical = 8.dp)
+                        .height(165.dp)
+                        .padding(vertical = 6.dp)
                 ) {
                     val w = size.width
                     val h = size.height
@@ -189,7 +191,6 @@ private fun WeightEmaChartCard(
                         return h - (normalized * h)
                     }
 
-                    // 3 条水平参考虚线
                     listOf(0.15f, 0.5f, 0.85f).forEach { frac ->
                         drawLine(
                             color = gridColor,
@@ -200,7 +201,6 @@ private fun WeightEmaChartCard(
                         )
                     }
 
-                    // 绘制 7日 EMA 平滑主趋势线
                     val emaPath = Path()
                     points.forEachIndexed { idx, pt ->
                         val x = idx * stepX
@@ -217,7 +217,6 @@ private fun WeightEmaChartCard(
                         )
                     )
 
-                    // 绘制原始每日晨重散点
                     points.forEachIndexed { idx, pt ->
                         pt.rawWeightKg?.let { rawW ->
                             val x = idx * stepX
@@ -236,12 +235,12 @@ private fun WeightEmaChartCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "● 橙点：每日原始晨重（含水分波动）",
+                        text = "● 每天称重",
                         style = MaterialTheme.typography.labelMedium,
                         color = AmberSecondaryLight
                     )
                     Text(
-                        text = "━ 绿线：7日 EMA 真实趋势",
+                        text = "━ 真实走势",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
@@ -253,13 +252,14 @@ private fun WeightEmaChartCard(
 }
 
 @Composable
-private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
+private fun WeeklyIntakeCard(bank: WeeklyBankState) {
     val balance = bank.bankBalanceBeforeToday
     val balanceText = when {
-        balance > 0 -> "本周结余 +$balance kcal"
-        balance < 0 -> "待分摊 $balance kcal"
-        else -> "预算均衡"
+        balance > 0 -> "少吃了 $balance 大卡"
+        balance < 0 -> "多吃了 ${abs(balance)} 大卡"
+        else -> "节奏正好"
     }
+    val weekConsumed = bank.days.sumOf { it.intakeKcal }
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -269,7 +269,7 @@ private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -277,7 +277,7 @@ private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("🏦 周热量银行（周一至周日）", style = MaterialTheme.typography.titleMedium)
+                Text("本周摄入", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = balanceText,
                     style = MaterialTheme.typography.labelMedium,
@@ -290,9 +290,9 @@ private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MetricCol("本周总预算", "${bank.weeklyTotalBudget} kcal")
-                MetricCol("今日动态额度", "${bank.todayDynamicTarget} kcal", highlight = true)
-                MetricCol("安全保底下限", "${bank.safetyFloorKcal} kcal")
+                MetricCol("今天可吃", "${bank.todayDynamicTarget} 大卡", highlight = true)
+                MetricCol("本周已吃", "$weekConsumed 大卡")
+                MetricCol("别低于", "${bank.safetyFloorKcal} 大卡")
             }
 
             Row(
@@ -318,14 +318,14 @@ private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
                             contentAlignment = Alignment.BottomCenter,
                             modifier = Modifier
                                 .width(28.dp)
-                                .height(54.dp)
+                                .height(50.dp)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height((54f * (ratio / 1.2f)).dp)
+                                    .height((50f * (ratio / 1.2f)).dp)
                                     .background(barColor)
                             )
                         }
@@ -347,15 +347,20 @@ private fun WeeklyCalorieBankCard(bank: WeeklyBankState) {
 }
 
 @Composable
-private fun AdaptiveTdeeCard(tdee: AdaptiveTdeeResult) {
+private fun DailyBurnCard(
+    tdee: AdaptiveTdeeResult,
+    todayExerciseBurnKcal: Int
+) {
+    val totalTodayBurn = tdee.estimatedTdee + todayExerciseBurnKcal
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -363,12 +368,12 @@ private fun AdaptiveTdeeCard(tdee: AdaptiveTdeeResult) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("🔥 自适应真实代谢校准", style = MaterialTheme.typography.titleMedium)
+                Text("每天大约消耗", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = if (tdee.isCalibrated) "已动态激活" else "数据预热中 (${tdee.validDaysCount}/${tdee.minRequiredDays}天)",
+                    text = if (tdee.isCalibrated) "已按体重校准" else "记满8天更准 (${tdee.validDaysCount}/${tdee.minRequiredDays})",
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (tdee.isCalibrated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold
+                    color = if (tdee.isCalibrated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
@@ -376,9 +381,13 @@ private fun AdaptiveTdeeCard(tdee: AdaptiveTdeeResult) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                MetricCol("当前生效 TDEE", "${tdee.estimatedTdee} kcal", highlight = true)
-                MetricCol("公式静态估算", "${tdee.formulaTdee} kcal")
-                MetricCol("基础代谢 BMR", "${tdee.bmr} kcal")
+                MetricCol("今日总消耗", "$totalTodayBurn 大卡", highlight = true)
+                MetricCol("日常消耗", "${tdee.estimatedTdee} 大卡")
+                if (todayExerciseBurnKcal > 0) {
+                    MetricCol("今日运动", "+$todayExerciseBurnKcal 大卡", highlight = true)
+                } else {
+                    MetricCol("基础消耗", "${tdee.bmr} 大卡")
+                }
             }
 
             if (!tdee.isCalibrated) {
@@ -387,18 +396,13 @@ private fun AdaptiveTdeeCard(tdee: AdaptiveTdeeResult) {
                     progress = { ratio },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(7.dp)
+                        .height(6.dp)
                         .clip(CircleShape)
                 )
-                Text(
-                    text = "再积累 ${(tdee.minRequiredDays - tdee.validDaysCount).coerceAtLeast(1)} 个完整饮食记录日并保持晨重打卡，系统将根据「摄入热量 + 平滑体重变化」自动校准你的真实代谢。",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             } else {
-                val deltaStr = tdee.weightDelta14dKg?.let { String.format("%+.2f kg", it) } ?: "--"
+                val deltaStr = tdee.weightDelta14dKg?.let { String.format("%+.1f kg", it) } ?: "--"
                 Text(
-                    text = "近14天有效日均摄入 ${tdee.avgIntake14d ?: "--"} kcal · 平滑体重变化 $deltaStr → 已为你自动消除估算与穿戴设备偏差。",
+                    text = "近两周日均吃 ${tdee.avgIntake14d ?: "--"} 大卡 · 体重 $deltaStr",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -417,11 +421,12 @@ private fun BodyShapeCard(
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
@@ -429,22 +434,15 @@ private fun BodyShapeCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("📏 腰围与体脂率低频记录", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = "每周测 1 次即可，平台期腰围缩小说明正在掉纯脂肪",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text("腰围与体脂", style = MaterialTheme.typography.titleMedium)
                 OutlinedButton(onClick = onOpenRecordDialog) {
-                    Text("记一次")
+                    Text("记录")
                 }
             }
 
             if (shapeLogs.isEmpty()) {
                 Text(
-                    text = "暂无围度记录，建议每周固定一天早晨软尺平脐量一次腰围。",
+                    text = "暂无记录",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -498,16 +496,18 @@ private fun BodyShapeDialog(
 ) {
     var waistText by remember { mutableStateOf(initialWaist?.let { String.format("%.1f", it) }.orEmpty()) }
     var fatText by remember { mutableStateOf(initialBodyFat?.let { String.format("%.1f", it) }.orEmpty()) }
+    val validWaist = waistText.toFloatOrNull()?.takeIf { it in 40f..180f }
+    val validFat = fatText.toFloatOrNull()?.takeIf { it in 4f..65f }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("记录今日腰围 / 体脂率") },
+        title = { Text("记录腰围 / 体脂") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = waistText,
                     onValueChange = { waistText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("腰围 (cm，选填)") },
+                    label = { Text("腰围 (cm)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -515,7 +515,7 @@ private fun BodyShapeDialog(
                 OutlinedTextField(
                     value = fatText,
                     onValueChange = { fatText = it.filter { c -> c.isDigit() || c == '.' }.take(5) },
-                    label = { Text("体脂率 (% ，选填)") },
+                    label = { Text("体脂率 (%)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -525,10 +525,9 @@ private fun BodyShapeDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val w = waistText.toFloatOrNull()?.takeIf { it in 40f..180f }
-                    val f = fatText.toFloatOrNull()?.takeIf { it in 4f..65f }
-                    if (w != null || f != null) onConfirm(w, f)
-                }
+                    if (validWaist != null || validFat != null) onConfirm(validWaist, validFat)
+                },
+                enabled = validWaist != null || validFat != null
             ) {
                 Text("保存")
             }
